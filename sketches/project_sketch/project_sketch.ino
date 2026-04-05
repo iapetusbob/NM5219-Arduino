@@ -1,56 +1,114 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-/* LOGIC HERE
-4 buttons: up, down, enter, cancel
-Each round, arduino will prompt p2 the color for the round
-P2 will log no. of marbles they put in their hole that round using "up" and "down", before "enter"
-Arduino will prompt "Marbles scored this turn: <points> ✓/✗"
-P2 will "enter" if correct, "cancel" if wrong to return to prev prompt "Marbles scored this turn: __"
-To log end of game to arduino, p2 will press "cancel"
-Arduino will prompt "The game has ended. ✓/✗", to which p2 can "enter" or "cancel".
-Once confirmed, Arduino shows "Game ended. Total Points: <total points>".
-P2 can start a new game by 
-*/
-
-// setting up the LCD
+// Setting up the LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// declare const here
-// game messages to 16 chars since LCD screen only prints 16 chars
-const char* GAME_START1 = "Welcome!"; // print 4 chars in
+// Game messages (Fixed syntax and added padding for centering)
+const char* GAME_START1 = "    Welcome!    ";
 const char* GAME_START2 = "ModifiedCangkok!";
-const char* GAME_END1 = "Game Ended." // print 3 chars in
-const char* GAME_END2 = "TotalPoints: ";
-const char* CONFIRMATION = "✓ | ✗";
-const char* MARBLES_SCORED = "Points Scored: ";   // add CONFIRMATION for confirmations
-const char* GAME_END_CONFIRMATION = "End Game?";  // rmb to add CONFIRMATION at the end
+const char* GAME_END1 = "   Game Ended.  ";
+const char* GAME_END2 = "Total Points: ";
+const char* CONFIRMATION = "  ✓ | ✗  ";
+const char* MARBLES_SCORED = "Points: ";
+const char* GAME_END_CONFIRMATION = "   End Game?    ";
 const char* OBJECTIVE = "Color this turn:";
-const char* RED = "RED";
-const char* BLUE = "BLUE";
-const char* GREEN = "GREEN";
-const char* YELLOW = "YELLOW";
-const char* CLEAR = "CLEAR";
 
-// confirm / cancel buttons
-const bool CONFIRM = 1;
-const bool CANCEL = 0;
+const char* COLORS[] = {"RED", "BLUE", "GREEN", "YELLOW", "CLEAR"};
 
-// pin numbers
-const uint8_t PIN_UP;
-const uint8_t PIN_DOWN;
-const uint8_t PIN_CONFIRM;
-const uint8_t PIN_CANCEL;
+// Pin numbers
+const uint8_t PIN_UP = 2;
+const uint8_t PIN_DOWN = 3;
+const uint8_t PIN_CONFIRM = 4;
+const uint8_t PIN_CANCEL = 5;
 
-uint8_t marbles_scored;
-uint8_t total_score;
+// Variables
+uint8_t marbles_scored = 0;
+int total_score = 0;
+int colorIdx = 0;
 
+// Helper to wait for a button press and return which one
+char getButton() {
+  while (true) {
+    if (digitalRead(PIN_UP) == LOW) { delay(200); while(digitalRead(PIN_UP) == LOW); return 'U'; }
+    if (digitalRead(PIN_DOWN) == LOW) { delay(200); while(digitalRead(PIN_DOWN) == LOW); return 'D'; }
+    if (digitalRead(PIN_CONFIRM) == LOW) { delay(200); while(digitalRead(PIN_CONFIRM) == LOW); return 'E'; }
+    if (digitalRead(PIN_CANCEL) == LOW) { delay(200); while(digitalRead(PIN_CANCEL) == LOW); return 'C'; }
+  }
+}
 
 void setup() {
-  Serial.begin(9600);
+  pinMode(PIN_UP, INPUT_PULLUP);
+  pinMode(PIN_DOWN, INPUT_PULLUP);
+  pinMode(PIN_CONFIRM, INPUT_PULLUP);
+  pinMode(PIN_CANCEL, INPUT_PULLUP);
+
   lcd.init();
   lcd.backlight();
+  
+  // Initial Welcome
+  lcd.setCursor(0, 0); lcd.print(GAME_START1);
+  lcd.setCursor(0, 1); lcd.print(GAME_START2);
+  getButton(); // Press any button to start
 }
 
 void loop() {
+  // 1. Show the Color Objective
+  lcd.clear();
+  lcd.print(OBJECTIVE);
+  lcd.setCursor(0, 1);
+  lcd.print(COLORS[colorIdx]);
+
+  char action = getButton();
+
+  // 2. Logic for Enter (Start counting marbles) or Cancel (Check if game over)
+  if (action == 'E') {
+    bool confirmed = false;
+    marbles_scored = 0;
+
+    while (!confirmed) {
+      // Counting Sub-menu
+      lcd.clear();
+      lcd.print("Marbles: "); lcd.print(marbles_scored);
+      lcd.setCursor(0, 1); lcd.print("Up/Dn or Enter");
+
+      char countAction = getButton();
+      if (countAction == 'U') marbles_scored++;
+      if (countAction == 'D' && marbles_scored > 0) marbles_scored--;
+      
+      if (countAction == 'E') {
+        // Confirmation Sub-menu
+        lcd.clear();
+        lcd.print(MARBLES_SCORED); lcd.print(marbles_scored);
+        lcd.setCursor(0, 1); lcd.print(CONFIRMATION);
+        
+        if (getButton() == 'E') {
+          total_score += marbles_scored;
+          colorIdx = (colorIdx + 1) % 5; // Move to next color
+          confirmed = true; 
+        } 
+        // If 'Cancel' is pressed here, 'confirmed' remains false and it loops back to Counting
+      }
+    }
+  } 
+  
+  else if (action == 'C') {
+    // End Game Confirmation logic
+    lcd.clear();
+    lcd.print(GAME_END_CONFIRMATION);
+    lcd.setCursor(0, 1); lcd.print(CONFIRMATION);
+
+    if (getButton() == 'E') {
+      // Final Score Screen
+      lcd.clear();
+      lcd.print(GAME_END1);
+      lcd.setCursor(0, 1);
+      lcd.print(GAME_END2); lcd.print(total_score);
+      
+      getButton(); // Wait for press to reset
+      total_score = 0;
+      colorIdx = 0;
+    }
+    // If Cancel is pressed, it just exits this 'if' and returns to the current objective
+  }
 }
