@@ -1,39 +1,46 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// Setting up the LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// Game messages (Fixed syntax and added padding for centering)
+// Game messages
 const char* GAME_START1 = "    Welcome!    ";
 const char* GAME_START2 = "ModifiedCangkok!";
 const char* GAME_END1 = "   Game Ended.  ";
-const char* GAME_END2 = "Total Points: ";
-const char* CONFIRMATION = "  ✓ | ✗  ";
+const char* GAME_END2 = "Score: ";
+const char* CONFIRMATION = "  OK:v | NO:x  ";
 const char* MARBLES_SCORED = "Points: ";
 const char* GAME_END_CONFIRMATION = "   End Game?    ";
-const char* OBJECTIVE = "Color this turn:";
+const char* OBJECTIVE = "Color: ";
 
 const char* COLORS[] = {"RED", "BLUE", "GREEN", "YELLOW", "CLEAR"};
+int colorPool[] = {0, 1, 2, 3}; 
+int stepInCycle = 0; 
 
-// Pin numbers
 const uint8_t PIN_UP = 2;
 const uint8_t PIN_DOWN = 3;
 const uint8_t PIN_CONFIRM = 4;
 const uint8_t PIN_CANCEL = 5;
 
-// Variables
 uint8_t marbles_scored = 0;
 int total_score = 0;
-int colorIdx = 0;
+int colorIdx = 4; // Start on CLEAR
 
-// Helper to wait for a button press and return which one
 char getButton() {
   while (true) {
-    if (digitalRead(PIN_UP) == LOW) { delay(200); while(digitalRead(PIN_UP) == LOW); return 'U'; }
-    if (digitalRead(PIN_DOWN) == LOW) { delay(200); while(digitalRead(PIN_DOWN) == LOW); return 'D'; }
-    if (digitalRead(PIN_CONFIRM) == LOW) { delay(200); while(digitalRead(PIN_CONFIRM) == LOW); return 'E'; }
-    if (digitalRead(PIN_CANCEL) == LOW) { delay(200); while(digitalRead(PIN_CANCEL) == LOW); return 'C'; }
+    if (digitalRead(PIN_UP) == LOW) { delay(50); while(digitalRead(PIN_UP) == LOW); return 'U'; }
+    if (digitalRead(PIN_DOWN) == LOW) { delay(50); while(digitalRead(PIN_DOWN) == LOW); return 'D'; }
+    if (digitalRead(PIN_CONFIRM) == LOW) { delay(50); while(digitalRead(PIN_CONFIRM) == LOW); return 'E'; }
+    if (digitalRead(PIN_CANCEL) == LOW) { delay(50); while(digitalRead(PIN_CANCEL) == LOW); return 'C'; }
+  }
+}
+
+void shufflePool() {
+  for (int i = 3; i > 0; i--) {
+    int j = random(0, i + 1);
+    int temp = colorPool[i];
+    colorPool[i] = colorPool[j];
+    colorPool[j] = temp;
   }
 }
 
@@ -46,14 +53,17 @@ void setup() {
   lcd.init();
   lcd.backlight();
   
-  // Initial Welcome
   lcd.setCursor(0, 0); lcd.print(GAME_START1);
   lcd.setCursor(0, 1); lcd.print(GAME_START2);
-  getButton(); // Press any button to start
+  getButton(); 
+
+  randomSeed(analogRead(0)); 
+  shufflePool(); 
+  colorIdx = 4;   
+  stepInCycle = 0;
 }
 
 void loop() {
-  // 1. Show the Color Objective
   lcd.clear();
   lcd.print(OBJECTIVE);
   lcd.setCursor(0, 1);
@@ -61,54 +71,62 @@ void loop() {
 
   char action = getButton();
 
-  // 2. Logic for Enter (Start counting marbles) or Cancel (Check if game over)
   if (action == 'E') {
     bool confirmed = false;
     marbles_scored = 0;
 
     while (!confirmed) {
-      // Counting Sub-menu
       lcd.clear();
       lcd.print("Marbles: "); lcd.print(marbles_scored);
       lcd.setCursor(0, 1); lcd.print("Up/Dn or Enter");
 
       char countAction = getButton();
-      if (countAction == 'U') marbles_scored++;
+      if (countAction == 'U' && marbles_scored < 9) marbles_scored++;
       if (countAction == 'D' && marbles_scored > 0) marbles_scored--;
       
       if (countAction == 'E') {
-        // Confirmation Sub-menu
         lcd.clear();
         lcd.print(MARBLES_SCORED); lcd.print(marbles_scored);
         lcd.setCursor(0, 1); lcd.print(CONFIRMATION);
         
         if (getButton() == 'E') {
           total_score += marbles_scored;
-          colorIdx = (colorIdx + 1) % 5; // Move to next color
           confirmed = true; 
-        } 
-        // If 'Cancel' is pressed here, 'confirmed' remains false and it loops back to Counting
+
+          // Update Cycle Logic
+          stepInCycle++;
+          if (stepInCycle >= 5) {
+            stepInCycle = 0; 
+          }
+
+          if (stepInCycle == 0) {
+            colorIdx = 4; // Back to CLEAR
+            shufflePool(); 
+          } else {
+            colorIdx = colorPool[stepInCycle - 1];
+          }
+        }
       }
     }
   } 
-  
   else if (action == 'C') {
-    // End Game Confirmation logic
     lcd.clear();
     lcd.print(GAME_END_CONFIRMATION);
     lcd.setCursor(0, 1); lcd.print(CONFIRMATION);
 
     if (getButton() == 'E') {
-      // Final Score Screen
       lcd.clear();
       lcd.print(GAME_END1);
       lcd.setCursor(0, 1);
       lcd.print(GAME_END2); lcd.print(total_score);
       
-      getButton(); // Wait for press to reset
+      getButton(); 
+      
+      // RESET EVERYTHING FOR NEW GAME
       total_score = 0;
-      colorIdx = 0;
+      colorIdx = 4; 
+      stepInCycle = 0;
+      shufflePool();
     }
-    // If Cancel is pressed, it just exits this 'if' and returns to the current objective
   }
 }
