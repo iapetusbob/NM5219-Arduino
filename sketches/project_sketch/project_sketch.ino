@@ -94,6 +94,7 @@ void loop() {
   if (millis() - lastDebounceTime > debounceDelay) {
 
       if (action == 'E') {
+
     bool confirmed = false;
 
     while (!confirmed) {
